@@ -38,6 +38,7 @@
     "build-plugins": "node build-extras.mjs plugins",
     "build-addons": "node build-extras.mjs addons",
     "copy-dist": "node -e \"require('fs').cpSync('build', 'dist', {recursive: true}); console.log('Copiado build/ -> dist/')\"",
+    "build-dev": "npm run build && npm run copy-dist && npx serve .",
     "clean": "node -e \"require('fs').rmSync('build', {recursive:true, force:true})\"",
     "start": "node esbuild.mjs --minify --serve",
     "update": "npm update speedy-vision",

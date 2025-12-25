@@ -226,7 +226,7 @@ class ARSystem
         this._pointers = [];
         this._origin = null;
         this._root = null;
-        this._app = null; // Equivalent to engine/scene in other adapters
+        this._app = null;
         this._camera = null;
         this._utils = new ARUtils();
     }
@@ -239,25 +239,43 @@ class ARSystem
  */
 function encantar(demo)
 {
+    console.log('[plugin] === VERSION TEST-013 ===');
+    
     const ar = new ARSystem();
     let _mat = null;
     let _pos = null;
     let _rot = null;
     let _scl = null;
+    let _lastTimestamp = 0;
 
     function animate(time, frame)
     {
-        ar._frame = frame;
-        mix(frame);
+        try {
+            // Log first frame
+            if(!animate._started) {
+                console.log('[plugin] animate(): FIRST FRAME RECEIVED!');
+                animate._started = true;
+            }
+            
+            // Log periodically
+            if(!animate._frameCount) animate._frameCount = 0;
+            animate._frameCount++;
+            if(animate._frameCount % 60 === 0) {
+                console.log('[plugin] animate(): frame', animate._frameCount);
+            }
+            
+            ar._frame = frame;
+            mix(frame);
 
-        demo.update();
+            demo.update();
 
-        // Manually tick the PlayCanvas app
-        // We use a small delta because AR loop handles timing
-        ar._app.tick(1000 / 60); 
-        
-        ar._app.renderNextFrame = true;
-        ar._session.requestAnimationFrame(animate);
+            // Render the scene
+            ar._app.render();
+            
+            ar._session.requestAnimationFrame(animate);
+        } catch(error) {
+            console.error('[plugin] animate() ERROR:', error);
+        }
     }
 
     function mix(frame)
@@ -265,6 +283,17 @@ function encantar(demo)
         let found = false;
         ar._viewer = null;
         ar._pointers.length = 0;
+        
+        // Log frame results periodically
+        if(!mix._frameCount) mix._frameCount = 0;
+        mix._frameCount++;
+        
+        if(mix._frameCount % 60 === 0) {
+            console.log('[plugin] mix(): frame.results count:', frame.results.length);
+            for(const result of frame.results) {
+                console.log('[plugin] mix(): result type check - image-tracker:', result.of('image-tracker'), ', trackables:', result.trackables ? result.trackables.length : 'N/A');
+            }
+        }
 
         for(const result of frame.results) {
             if(result.of('image-tracker')) {
@@ -279,6 +308,14 @@ function encantar(demo)
                     ar._viewer = result.viewer;
 
                     found = true;
+                    
+                    // Debug log (only once per second to avoid spam)
+                    if(!mix._lastLog || Date.now() - mix._lastLog > 1000) {
+                        console.log('[plugin] mix(): TARGET FOUND! origin.enabled:', ar._origin.enabled);
+                        console.log('[plugin] mix(): origin position:', ar._origin.getPosition().toString());
+                        console.log('[plugin] mix(): root.enabled:', ar._root.enabled);
+                        mix._lastLog = Date.now();
+                    }
                 }
             }
             else if(result.of('pointer-tracker')) {
@@ -294,12 +331,11 @@ function encantar(demo)
     function align(perspectiveView, viewMatrixInverse, modelMatrix)
     {
         // 1. Update Camera Projection
-        // PlayCanvas uses a Mat4 property on the camera component if we want custom projection
         const camComp = ar._camera.camera;
         _mat.data.set(perspectiveView.projectionMatrix.read());
         camComp.projectionMatrix.copy(_mat);
 
-        // some methods of the camera component depend on the projection parameters
+        // Update projection parameters for camera component
         camComp.nearClip = perspectiveView.near;
         camComp.farClip = perspectiveView.far;
         camComp.fov = perspectiveView.fovy * pc.math.RAD_TO_DEG;
@@ -312,7 +348,6 @@ function encantar(demo)
         _rot.setFromMat4(_mat);
         ar._camera.setPosition(_pos);
         ar._camera.setRotation(_rot);
-        // We generally don't scale the camera
 
         // 3. Update Origin/Root Pose (Model Matrix)
         _mat.data.set(modelMatrix.read());
@@ -339,12 +374,23 @@ function encantar(demo)
 
     function awake()
     {
+        console.log('[plugin] awake() called');
         demo._ar = ar;
+        console.log('[plugin] demo._ar assigned:', demo._ar);
+        console.log('[plugin] demo.canvas:', demo.canvas);
 
-        // if possible, create the 3D engine before preloading the assets
+        // PlayCanvas requires the app to exist before preloading assets
+        // Create the 3D engine now if a canvas is provided
         if(demo.canvas !== null) {
+            console.log('[plugin] Creating 3D engine...');
             create3DEngine(demo.canvas);
             demo.canvas.hidden = true;
+            
+            // Start the app early so assets can be loaded during preload()
+            ar._app.start();
+            console.log('[plugin] App started, ar._app:', ar._app);
+        } else {
+            console.log('[plugin] WARNING: demo.canvas is null!');
         }
     }
 
@@ -364,40 +410,47 @@ function encantar(demo)
             demo.canvas.hidden = false;
         else {
             session.end();
-            throw new Error('ar-canvas mismatch'); // Tip: check your AR viewport
+            throw new Error('ar-canvas mismatch');
         }
 
         const { width, height } = session.viewport.virtualSize;
-        ar._app._allowResize = false; // respect the settings of the viewport; encantar alone handles the resize
+        ar._app._allowResize = false;
         ar._app.setCanvasFillMode(pc.FILLMODE_NONE, width, height);
         ar._app.setCanvasResolution(pc.RESOLUTION_FIXED, width, height);
-        ar._app.autoRender = false; // We drive the loop via encantar, not PlayCanvas internal loop
-        ar._app.start();
+        ar._app.autoRender = false;
+        
+        // Only start if not already started during awake()
+        if (!ar._app._appStarted) {
+            ar._app.start();
+        }
+        ar._app._appStarted = true;
 
-        // Setup helper objects for matrix math to avoid GC
+        // Setup helper objects for matrix math
         _mat = new pc.Mat4();
         _pos = new pc.Vec3();
         _rot = new pc.Quat();
         _scl = new pc.Vec3();
 
         // Setup Scene Hierarchy
-        // ar-origin (Hidden/Shown based on tracking)
-        //   -> ar-root (User content goes here)
         ar._origin = new pc.Entity('ar-origin');
         ar._origin.enabled = false;
         ar._app.root.addChild(ar._origin);
 
         ar._root = new pc.Entity('ar-root');
         ar._origin.addChild(ar._root);
+        
+        console.log('[plugin] Scene hierarchy setup complete');
+        console.log('[plugin] ar._origin.enabled:', ar._origin.enabled);
+        console.log('[plugin] ar._root.enabled (own):', ar._root._enabled); // Internal state
+        console.log('[plugin] ar._root.enabled (getter):', ar._root.enabled); // May inherit from parent
 
         // Setup Camera
         ar._camera = new pc.Entity('ar-camera');
         ar._camera.addComponent('camera', {
-            clearColor: new pc.Color(0, 0, 0, 0), // Transparent background
+            clearColor: new pc.Color(0, 0, 0, 0),
             aspectRatioMode: pc.ASPECT_MANUAL
         });
         ar._camera.camera.calculateProjection = function(mat) {
-             // We must override the calculateProjection method to prevent PC from overwriting it
              mat.copy(this.projectionMatrix);
              return mat;
         };
@@ -411,17 +464,38 @@ function encantar(demo)
             ar._pointers.length = 0;
         });
 
-        // initialize the demo and start the main loop
+        // Handle viewport resize
+        session.viewport.addEventListener('resize', event => {
+            const size = session.viewport.virtualSize;
+            ar._app.setCanvasResolution(pc.RESOLUTION_FIXED, size.width, size.height);
+            ar._app.setCanvasFillMode(pc.FILLMODE_NONE, size.width, size.height);
+            
+            // Update camera aspect ratio
+            if (ar._camera && ar._camera.camera) {
+                ar._camera.camera.aspectRatio = size.width / size.height;
+            }
+            
+            // Force a render
+            ar._app.renderNextFrame = true;
+        });
+
+        // Initialize the demo and start the main loop
         return Promise.resolve()
         .then(() => {
+            console.log('[plugin] About to call demo.init()...');
             return demo.init();
         })
         .then(() => {
+            console.log('[plugin] demo.init() completed, starting animation loop...');
             session.addEventListener('end', event => { demo.release(); });
+            _lastTimestamp = performance.now();
+            console.log('[plugin] Calling session.requestAnimationFrame(animate)...');
             session.requestAnimationFrame(animate);
+            console.log('[plugin] Animation loop started!');
             return ar;
         })
         .catch(error => {
+            console.error('[plugin] Error during init/loop start:', error);
             session.end();
             throw error;
         });
