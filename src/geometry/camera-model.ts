@@ -153,9 +153,10 @@ export class CameraModel
     /**
      * Update the camera model
      * @param homographyNDC 3x3 perspective transform
+     * @param trackingQuality tracking quality score in [0,1]. Higher values mean more reliable measurements.
      * @returns a promise that resolves to a camera matrix
-     */
-    update(homographyNDC: SpeedyMatrix): SpeedyPromise<SpeedyMatrix>
+     */    
+    update(homographyNDC: SpeedyMatrix, trackingQuality: number = 1): SpeedyPromise<SpeedyMatrix>
     {
         Utils.assert(homographyNDC.rows == 3 && homographyNDC.columns == 3);
 
@@ -175,7 +176,8 @@ export class CameraModel
 
         // estimate the pose
         const pose = this._estimatePose(homography);
-        if(this._filter.feed(pose))
+        // Pass tracking quality into the pose filter so smoothing adapts to measurement reliability
+        if(this._filter.feed(pose, trackingQuality))
             this._extrinsics = this._filter.output().read();
 
         // compute the camera matrix

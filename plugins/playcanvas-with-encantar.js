@@ -325,7 +325,7 @@ function encantar(demo)
         }
 
         if(!found)
-            ar._origin.enabled = false;
+            ar._origin.enabled = !!demo.debugAlwaysVisible ? true : false;
     }
 
     function align(perspectiveView, viewMatrixInverse, modelMatrix)
@@ -380,8 +380,15 @@ function encantar(demo)
         console.log('[plugin] demo.canvas:', demo.canvas);
 
         // PlayCanvas requires the app to exist before preloading assets
-        // Create the 3D engine now if a canvas is provided
-        if(demo.canvas !== null) {
+        // Prefer reusing an existing app (if provided) to avoid creating TWO PlayCanvas apps
+        // that fight for the same canvas (which breaks GSplat/asset rendering).
+        if(demo.app) {
+            ar._app = demo.app;
+            console.log('[plugin] Reusing existing PlayCanvas app from demo.app');
+        }
+
+        // Otherwise, create the 3D engine now if a canvas is provided
+        if(!ar._app && demo.canvas !== null) {
             console.log('[plugin] Creating 3D engine...');
             create3DEngine(demo.canvas);
             demo.canvas.hidden = true;
@@ -389,8 +396,8 @@ function encantar(demo)
             // Start the app early so assets can be loaded during preload()
             ar._app.start();
             console.log('[plugin] App started, ar._app:', ar._app);
-        } else {
-            console.log('[plugin] WARNING: demo.canvas is null!');
+        } else if(!ar._app) {
+            console.log('[plugin] WARNING: demo.canvas is null and demo.app not provided!');
         }
     }
 
@@ -404,13 +411,21 @@ function encantar(demo)
         ar._session = session;
 
         // Initialize PlayCanvas Application
-        if(!ar._app)
+        if(!ar._app) {
             create3DEngine(session.viewport.canvas);
-        else if(demo.canvas === session.viewport.canvas)
-            demo.canvas.hidden = false;
+        }
         else {
-            session.end();
-            throw new Error('ar-canvas mismatch');
+            // Validate canvas match when reusing an existing app
+            const existingCanvas = ar._app.graphicsDevice && ar._app.graphicsDevice.canvas;
+            if(existingCanvas && existingCanvas !== session.viewport.canvas) {
+                session.end();
+                throw new Error('ar-canvas mismatch');
+            }
+
+            // If the app was provided externally, prevent a second start()
+            if(demo.app) {
+                ar._app._appStarted = true;
+            }
         }
 
         const { width, height } = session.viewport.virtualSize;
@@ -419,9 +434,12 @@ function encantar(demo)
         ar._app.setCanvasResolution(pc.RESOLUTION_FIXED, width, height);
         ar._app.autoRender = false;
         
-        // Only start if not already started during awake()
+        // Only start if not already started during awake() / externally
         if (!ar._app._appStarted) {
-            ar._app.start();
+            // If demo.app exists, the app is managed by the caller
+            if (!demo.app) {
+                ar._app.start();
+            }
         }
         ar._app._appStarted = true;
 
@@ -433,7 +451,7 @@ function encantar(demo)
 
         // Setup Scene Hierarchy
         ar._origin = new pc.Entity('ar-origin');
-        ar._origin.enabled = false;
+        ar._origin.enabled = !!demo.debugAlwaysVisible ? true : false;
         ar._app.root.addChild(ar._origin);
 
         ar._root = new pc.Entity('ar-root');
@@ -458,7 +476,7 @@ function encantar(demo)
 
         // Event Listeners
         session.addEventListener('end', event => {
-            ar._origin.enabled = false;
+            ar._origin.enabled = !!demo.debugAlwaysVisible ? true : false;
             ar._viewer = null;
             ar._frame = null;
             ar._pointers.length = 0;

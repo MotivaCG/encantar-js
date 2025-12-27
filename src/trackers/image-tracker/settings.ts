@@ -96,7 +96,7 @@ export const SUBPIXEL_METHOD = 'bilinear-upsample'; // 'quadratic1d';
 export const PRE_TRACK_MIN_MATCHES = 4;
 
 /** Used to identify the best maches */
-export const PRE_TRACK_MATCH_RATIO = 0.6; // usually a value in [0.6, 0.8] - low values => strict tracking
+export const PRE_TRACK_MATCH_RATIO = 0.66; // usually a value in [0.6, 0.8] - low values => strict tracking
 
 /** Reprojection error, in NIS pixels, used when pre-tracking */
 export const PRE_TRACK_RANSAC_REPROJECTIONERROR_NIS = (NIS_SIZE * 0.0125 * 0.5) | 0;
@@ -105,7 +105,7 @@ export const PRE_TRACK_RANSAC_REPROJECTIONERROR_NIS = (NIS_SIZE * 0.0125 * 0.5) 
 export const PRE_TRACK_RANSAC_REPROJECTIONERROR_NDC = PRE_TRACK_RANSAC_REPROJECTIONERROR_NIS / (NIS_SIZE / 2);
 
 /** Interpolation filter: interpolation factor */
-export const PRE_TRACK_FILTER_ALPHA = 0.8;
+export const PRE_TRACK_FILTER_ALPHA = 0.26;
 
 /** Interpolation filter: correction strength for noisy corners */
 export const PRE_TRACK_FILTER_BETA = 1;
@@ -129,7 +129,7 @@ export const TRACK_HARRIS_QUALITY = 0.005; // get a lot of keypoints
 export const TRACK_WITH_NIGHTVISION = false; // produces shaking?
 
 /** Relative size (%) of the (top, right, bottom, left) borders of the rectified image */
-export const TRACK_RECTIFIED_BORDER = 0.15; //0.20;
+export const TRACK_RECTIFIED_BORDER = 0.17; //0.20;
 
 /** Relative size (%) used to clip keypoints from the borders of the rectified image */
 export const TRACK_CLIPPING_BORDER = TRACK_RECTIFIED_BORDER * 1.20; //1.25; //1.15;
@@ -159,7 +159,7 @@ export const TRACK_FILTER_ALPHA = 0.3; //0.4;
 export const TRACK_FILTER_BETA = 1;
 
 /** Extrapolation filter: extrapolation factor */
-export const TRACK_EXTRAPOLATION_ALPHA = 6; // 12+ = follows faster, but looks unstable (jitter)
+export const TRACK_EXTRAPOLATION_ALPHA = 1.5; // 12+ = follows faster, but looks unstable (jitter)
 
 /** Extrapolation filter: correction strength for noisy corners */
-export const TRACK_EXTRAPOLATION_BETA = 1.33;
+export const TRACK_EXTRAPOLATION_BETA = 1.1;

@@ -113,6 +113,9 @@ export class ImageTrackerTrackingState extends ImageTrackerState
 
     /** the number of consecutive frames in which we have lost the tracking */
     private _lostCounter: number;
+    
+    /** last RANSAC inlier ratio (quality score) from the pose estimation stage */
+    private _lastWarpScore: number;
 
     /** camera model linked to the tracked image */
     private _camera: CameraModel;
@@ -141,6 +144,7 @@ export class ImageTrackerTrackingState extends ImageTrackerState
         this._skipCounter = 0;
         this._counter = 0;
         this._lostCounter = 0;
+        this._lastWarpScore = 1;
         this._camera = new CameraModel();
         this._fixedCamera = new CameraModel();
     }
@@ -174,6 +178,7 @@ export class ImageTrackerTrackingState extends ImageTrackerState
         this._skipCounter = 0;
         this._counter = 0;
         this._lostCounter = 0;
+        this._lastWarpScore = 1;
 
         // setup portals
         keypointPortalSource.source = templateKeypointPortalSink;
@@ -314,16 +319,30 @@ export class ImageTrackerTrackingState extends ImageTrackerState
         .then(warpMotion => {
 
             const lowPower = (Settings.powerPreference == 'low-power');
-            const multiplier = /*!USE_TURBO ||*/ lowPower ? 2 : 1;
+            const fpsMultiplier = lowPower ? 2 : 1;
+                        
+            // Frame-rate compensated alpha:
+            // - keeps behavior consistent when we drop from ~60fps to ~30fps
+            // - NEVER exceeds 1 (avoids unintended extrapolation / overshoot jitter)
+            const baseAlpha = Math.max(0, Math.min(1, TRACK_FILTER_ALPHA));
+            let effectiveAlpha = 1 - Math.pow(1 - baseAlpha, fpsMultiplier);
+
+            // Use the inlier ratio as a quality hint: lower quality => stronger smoothing
+            const score = Math.max(0, Math.min(1, this._lastWarpScore || 0));
+            const qualityScale = 0.25 + 0.75 * score; // [0.25, 1]
+            effectiveAlpha *= qualityScale;
+
+            // If we had recent misses (tolerated), smooth a bit more on reacquisition
+            if(this._lostCounter > 0)
+                effectiveAlpha *= 0.7;
 
             // apply filter
             return ImageTrackerUtils.interpolateHomographies(
                 NO_MOTION,
                 Speedy.Matrix(warpMotion),
-                TRACK_FILTER_ALPHA * multiplier,
+                Math.max(0, Math.min(1, effectiveAlpha)),
                 TRACK_FILTER_BETA
             );
-
         })
         .then(warpMotion => {
 
@@ -334,11 +353,19 @@ export class ImageTrackerTrackingState extends ImageTrackerState
 
             // extrapolate to compensante a bit the delay introduced by the
             // previous filter
+            
+            // Adaptive extrapolation: extrapolation amplifies noise, so we fade it out when the tracking quality drops.
+            const score = Math.max(0, Math.min(1, (this._lastWarpScore || 0))) * (this._lostCounter > 0 ? 0.5 : 1);
+            const extrapAlpha = 1 + (TRACK_EXTRAPOLATION_ALPHA - 1) * score;
+            const extrapBeta = TRACK_EXTRAPOLATION_BETA; // keep beta stable for now
+
             return ImageTrackerUtils.interpolateHomographies(
                 this._prevHomography,
                 this._warpHomography,
                 TRACK_EXTRAPOLATION_ALPHA,
-                TRACK_EXTRAPOLATION_BETA,
+                TRACK_EXTRAPOLATION_BETA,                
+                extrapAlpha,
+                extrapBeta,
                 //2.5,0.1
             )
 
@@ -388,7 +415,8 @@ export class ImageTrackerTrackingState extends ImageTrackerState
             //this._poseHomography = homography; // visualize the polyline becoming a square
 
             // update camera model
-            return this._camera.update(homography);
+            const trackingQuality = Math.max(0, Math.min(1, (this._lastWarpScore || 0))) * (this._lostCounter > 0 ? 0.5 : 1);
+            return this._camera.update(homography, trackingQuality);
 
         })
         .then(() => {
@@ -518,6 +546,9 @@ export class ImageTrackerTrackingState extends ImageTrackerState
             bundleSize: 128,
             mask: undefined // score is not needed
         }).then(([ warp, score ]) => {
+
+            // save the inlier ratio as a lightweight tracking quality metric
+            this._lastWarpScore = score;
 
             const scale = TRACK_RECTIFIED_SCALE;
             const aspectRatio = ImageTrackerUtils.bestFitAspectRatioNDC(this.screenSize, this._referenceImage!);
