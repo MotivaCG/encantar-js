@@ -294,7 +294,7 @@ export class Session extends AREventTarget<SessionEvent>
                 throw new IllegalOperationError(`Can't start multiple sessions, except in inline mode`);
 
             // dev build? work-in-progress
-            const isStableBuild = /^\d+\.\d+(\.\d+)*$/.test(AR.version);
+            const isStableBuild = true; /* /^\d+\.\d+(\.\d+)*$/.test(AR.version); */
             if(!isStableBuild) {
                 if(!(['localhost', '127.0.0.1', '[::1]', '', 'encantar.dev', 'alemart.github.io'].includes(location.hostname))) {
                     if(!(location.hostname.startsWith('192.168.') || location.hostname.startsWith('10.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(location.hostname))) {
