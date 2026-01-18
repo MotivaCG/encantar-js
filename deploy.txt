@@ -1,0 +1,2 @@
+# Run the build-dev script
+npm run build-dev

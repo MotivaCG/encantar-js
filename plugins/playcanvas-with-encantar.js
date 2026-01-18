@@ -260,9 +260,9 @@ function encantar(demo)
             // Log periodically
             if(!animate._frameCount) animate._frameCount = 0;
             animate._frameCount++;
-            if(animate._frameCount % 60 === 0) {
+            /*if(animate._frameCount % 60 === 0) {
                 console.log('[plugin] animate(): frame', animate._frameCount);
-            }
+            }*/
             
             ar._frame = frame;
             mix(frame);
@@ -288,12 +288,12 @@ function encantar(demo)
         if(!mix._frameCount) mix._frameCount = 0;
         mix._frameCount++;
         
-        if(mix._frameCount % 60 === 0) {
+        /*if(mix._frameCount % 60 === 0) {
             console.log('[plugin] mix(): frame.results count:', frame.results.length);
             for(const result of frame.results) {
                 console.log('[plugin] mix(): result type check - image-tracker:', result.of('image-tracker'), ', trackables:', result.trackables ? result.trackables.length : 'N/A');
             }
-        }
+        }*/
 
         for(const result of frame.results) {
             if(result.of('image-tracker')) {
@@ -310,12 +310,12 @@ function encantar(demo)
                     found = true;
                     
                     // Debug log (only once per second to avoid spam)
-                    if(!mix._lastLog || Date.now() - mix._lastLog > 1000) {
+                    /*if(!mix._lastLog || Date.now() - mix._lastLog > 1000) {
                         console.log('[plugin] mix(): TARGET FOUND! origin.enabled:', ar._origin.enabled);
                         console.log('[plugin] mix(): origin position:', ar._origin.getPosition().toString());
                         console.log('[plugin] mix(): root.enabled:', ar._root.enabled);
                         mix._lastLog = Date.now();
-                    }
+                    }*/
                 }
             }
             else if(result.of('pointer-tracker')) {
